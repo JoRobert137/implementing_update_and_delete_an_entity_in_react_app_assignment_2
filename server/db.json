@@ -1,14 +1,19 @@
 {
-    "doors": [
-        {
-            "id": "1",
-            "name": "Front Door",
-            "status": "open"
-        },
-        {
-            "id": "2",
-            "name": "Back Door",
-            "status": "closed"
-        }
-    ]
+  "doors": [
+    {
+      "id": "2",
+      "name": "Back Door",
+      "status": "closed"
+    },
+    {
+      "id": "df31d260-8d32-4a36-883c-9f5ccb9ab893",
+      "name": "doormamu",
+      "status": "dead"
+    },
+    {
+      "id": "b3958a9f-c335-45f5-9fa3-490967116adb",
+      "name": "doormamu2",
+      "status": "im back again"
+    }
+  ]
 }

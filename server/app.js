@@ -1,117 +1,111 @@
-const path = require('node:path');
-const fs = require('node:fs');
-const express = require('express');
-const cors = require('cors');
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+import express from "express";
+import cors from "cors";
+import crypto from "node:crypto";
 
 const PORT = process.env.SECONDARY_PUBLIC_PORT || 8000;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
-// Custom middleware function to log requests and response status
-const logRequests = (req, res, next) => {
-    const startTime = new Date();
-
-    // Capture the end function to get the response status
-    const end = res.end;
-    res.end = function (chunk, encoding) {
-        res.end = end;
-        const endTime = new Date();
-        const duration = endTime - startTime;
-
-        console.log(
-            `[${endTime.toISOString()}] ${req.method} ${req.url} - ${res.statusCode
-            } - ${duration}ms`
-        );
-
-        // Call the original end function to complete the response
-        res.end(chunk, encoding);
-    };
-
+// Custom logging middleware
+app.use((req, res, next) => {
+    const start = Date.now();
+    res.on("finish", () => {
+        const duration = Date.now() - start;
+        console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - ${res.statusCode} - ${duration}ms`);
+    });
     next();
-};
+});
 
-// Use the middleware for all routes
-app.use(logRequests);
 app.use(cors());
 app.use(express.json());
 
+// Function to read data from db.json
 const loadData = (key) => {
     try {
-        const dbPath = path.resolve(__dirname, 'db.json');
-        const dataBuffer = fs.readFileSync(dbPath);
-        const dataJSON = dataBuffer.toString();
-        const data = JSON.parse(dataJSON);
-        return key ? data[key] : data;
-    } catch (e) {
+        const dbPath = path.resolve(__dirname, "db.json");
+        if (!fs.existsSync(dbPath)) return {};
+        const data = JSON.parse(fs.readFileSync(dbPath, "utf8"));
+        return key ? data[key] || [] : data;
+    } catch (error) {
+        console.error("Error loading data:", error);
         return {};
     }
 };
 
+// Function to write data to db.json
 const saveData = (key, data) => {
     try {
-        const dbPath = path.resolve(__dirname, 'db.json');
+        const dbPath = path.resolve(__dirname, "db.json");
         const existingData = loadData();
         const newData = { ...existingData, [key]: data };
-        const dataJSON = JSON.stringify(newData, null, 2);
-        fs.writeFileSync(dbPath, dataJSON);
+        fs.writeFileSync(dbPath, JSON.stringify(newData, null, 2));
         return data;
-    } catch (e) {
+    } catch (error) {
+        console.error("Error saving data:", error);
         return {};
     }
 };
 
-app.get('/doors', (_, res) => {
-    const doorsData = loadData('doors');
+// Get all doors
+app.get("/doors", (_, res) => {
+    const doorsData = loadData("doors");
     res.json(doorsData);
 });
 
-app.get('/doors/:id', (req, res) => {
-    const doorsData = loadData('doors');
-    const door = doorsData.find((door) => door.id === req.params.id);
+// Get a specific door by ID
+app.get("/doors/:id", (req, res) => {
+    const doorsData = loadData("doors");
+    const door = doorsData.find((door) => String(door.id) === String(req.params.id));
+
     if (door) {
         return res.json(door);
     }
-
-    res.status(404).json({ message: 'Door not found' });
+    res.status(404).json({ message: "Door not found" });
 });
 
-app.post('/doors', (req, res) => {
-    const doorsData = loadData('doors');
-    const newDoor = { id: (doorsData.length + 1).toString(), ...req.body };
+// Add a new door
+app.post("/doors", (req, res) => {
+    const doorsData = loadData("doors");
+    const newDoor = { id: crypto.randomUUID(), ...req.body };
     doorsData.push(newDoor);
-    saveData('doors', doorsData);
-    res.status(200).json(newDoor);
+    saveData("doors", doorsData);
+    res.status(201).json(newDoor);
 });
 
-app.put('/doors/:id', (req, res) => {
-    const doorsData = loadData('doors');
-    const doorIndex = doorsData.findIndex((door) => door.id === req.params.id);
-
-    // dont allow to update 'id' field
-    delete req.body.id;
+// Update an existing door
+app.put("/doors/:id", (req, res) => {
+    const doorsData = loadData("doors");
+    const doorIndex = doorsData.findIndex((door) => String(door.id) === String(req.params.id));
 
     if (doorIndex !== -1) {
+        delete req.body.id; // Prevent updating ID
         doorsData[doorIndex] = { ...doorsData[doorIndex], ...req.body };
-        saveData('doors', doorsData);
-        return res.status(200).json(doorsData[doorIndex]);
+        saveData("doors", doorsData);
+        return res.json(doorsData[doorIndex]);
     }
 
-    res.status(404).json({ message: 'Door not found' });
+    res.status(404).json({ message: "Door not found" });
 });
 
-app.delete('/doors/:id', (req, res) => {
-    const doorsData = loadData('doors');
-    const doorIndex = doorsData.findIndex((door) => door.id === req.params.id);
+// Delete a door
+app.delete("/doors/:id", (req, res) => {
+    const doorsData = loadData("doors");
+    const doorIndex = doorsData.findIndex((door) => String(door.id) === String(req.params.id));
+
     if (doorIndex !== -1) {
-        const deletedDoor = doorsData[doorIndex];
-        doorsData.splice(doorIndex, 1);
-        saveData('doors', doorsData);
-        return res.status(200).json(deletedDoor);
+        const deletedDoor = doorsData.splice(doorIndex, 1)[0];
+        saveData("doors", doorsData);
+        return res.json(deletedDoor);
     }
 
-    res.status(404).json({ message: 'Door not found' });
+    res.status(404).json({ message: "Door not found" });
 });
 
+// Start server
 app.listen(PORT, () => {
-    console.log(`🚀 server is running on ${PORT}`);
+    console.log(`🚀 Server is running on port ${PORT}`);
 });
